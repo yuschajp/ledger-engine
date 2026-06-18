@@ -1,156 +1,132 @@
-# Apex Global — Agentic AI Research Assistant
-## RAG Pipeline Demo | Unique AI Case Study
+# Ledger Engine
 
-A working Python implementation of the secure RAG architecture proposed in the
-Unique AI Product Expert case study. Demonstrates document ingestion, vector
-retrieval, citation-grounded generation, and immutable audit logging.
+A simplified portfolio accounting engine that mirrors the IBOR → ABOR pattern used by institutional platforms like SS&C Geneva and BlackRock Aladdin: transactions are the source of truth, positions are a derived snapshot rebuilt from transaction history rather than mutated in place, and every transaction generates a balanced pair of general ledger postings.
 
----
+## Why this exists
+
+This project demonstrates the data architecture and systems-integration thinking behind institutional portfolio accounting platforms, the same logic that sits underneath implementation work on systems like Geneva and Aladdin, built from scratch to show the mechanics rather than just describe them.
 
 ## Architecture
 
-```
-Financial Docs (PDF/TXT)
-        │
-        ▼
-┌─────────────────┐
-│  Doc Ingestion  │  PDF page extraction, type detection
-│  & Chunking     │  (broker_note / cb_minutes / transcript / filing)
-└────────┬────────┘
-         │
-         ▼
-┌─────────────────┐
-│  TF-IDF Vector  │  Cosine similarity retrieval
-│  Store          │  (swap → FinBERT embeddings in prod)
-└────────┬────────┘
-         │  top-K chunks
-         ▼
-┌─────────────────┐
-│  Prompt Builder │  Injects source context + citation rules
-│                 │  Enforces: no hallucination, source-only answers
-└────────┬────────┘
-         │
-         ▼
-┌─────────────────┐
-│  Claude API     │  claude-sonnet-4-20250514
-│  (private VPC   │  Set ANTHROPIC_API_KEY to enable
-│   in prod)      │
-└────────┬────────┘
-         │
-         ▼
-┌─────────────────┐
-│  Audit Log      │  Immutable JSONL — every query, source,
-│  (JSONL)        │  relevance score, and response logged
-└─────────────────┘
+```mermaid
+flowchart TD
+    A[Mock data feeds<br/>trades, prices<br/><i>built</i>] --> B[Core ledger engine<br/>positions, GL postings, NAV<br/><i>built</i>]
+    B --> C[Reconciliation engine<br/>break detection & classification<br/><i>planned</i>]
+    C --> D[AI triage agent<br/>root cause, audit trail, approval<br/><i>planned</i>]
+    D --> E[Reports & dashboard<br/>NAV, reconciliation summary<br/><i>planned</i>]
 ```
 
----
+## Schema
 
-## Quick Start
+```mermaid
+erDiagram
+    PORTFOLIOS ||--o{ TRANSACTIONS : records
+    PORTFOLIOS ||--o{ POSITIONS : holds
+    PORTFOLIOS ||--o{ GL_ENTRIES : owns
+    SECURITIES ||--o{ TRANSACTIONS : traded_in
+    SECURITIES ||--o{ POSITIONS : valued_as
+    SECURITIES ||--o{ PRICES : priced
+    TRANSACTIONS ||--o{ GL_ENTRIES : posts
+    GL_ACCOUNTS ||--o{ GL_ENTRIES : classifies
 
-### 1. Install dependencies
+    PORTFOLIOS {
+        int portfolio_id PK
+        string name
+        string base_currency
+        string strategy
+        date inception_date
+    }
+    SECURITIES {
+        int security_id PK
+        string ticker
+        string instrument_type
+        string currency
+        date maturity_date
+        float coupon_rate
+    }
+    TRANSACTIONS {
+        int transaction_id PK
+        int portfolio_id FK
+        int security_id FK
+        date trade_date
+        date settle_date
+        string transaction_type
+        float quantity
+        float price
+        float commission
+    }
+    POSITIONS {
+        int position_id PK
+        int portfolio_id FK
+        int security_id FK
+        date as_of_date
+        float quantity
+        float cost_basis
+        float market_value
+        float unrealized_pnl
+    }
+    PRICES {
+        int price_id PK
+        int security_id FK
+        date price_date
+        float price
+        string source
+    }
+    GL_ACCOUNTS {
+        int gl_account_id PK
+        string account_number
+        string account_name
+        string account_type
+    }
+    GL_ENTRIES {
+        int gl_entry_id PK
+        int transaction_id FK
+        int gl_account_id FK
+        int portfolio_id FK
+        date entry_date
+        float debit_amount
+        float credit_amount
+        string description
+    }
+```
+
+## Design decisions
+
+Positions are never updated in place. Every row in `positions` is rebuilt from scratch by summing the full transaction history up to a given date, so every position is traceable back to the exact transactions that produced it. This mirrors how a real investment book of record (IBOR) behaves.
+
+Every transaction generates two GL entries, never one, because double-entry accounting requires it. A buy debits the security account and credits cash; a sell does the reverse.
+
+## Getting started
+
+Requires Python 3 only — no external dependencies.
+
 ```bash
-pip install anthropic pypdf scikit-learn numpy
+git clone <your-repo-url>
+cd ledger-engine
+python3 demo.py
 ```
 
-### 2. Run demo (uses built-in sample docs — no API key needed)
-```bash
-python rag_pipeline.py --demo
+Expected output:
+
+```
+Position as of 2024-06-01: 1000 units, cost basis $25,500.00
+
+GL entries posted:
+  DR $25,510.00  -  Buy 1000 units
+  CR $25,510.00  -  Cash settlement for buy
 ```
 
-### 3. Enable live Claude responses
-```bash
-export ANTHROPIC_API_KEY=your_key_here
-python rag_pipeline.py --demo
+## Project structure
+
+```
+schema.sql           # table definitions
+ledger_engine.py      # core engine: transaction insertion, position recomputation, GL posting
+demo.py                # end-to-end example
+README.md
 ```
 
-### 4. Ingest your own documents
-```bash
-python rag_pipeline.py --ingest ./your_docs_folder/
-```
-Supports: `.pdf`, `.txt`
+## Roadmap
 
-### 5. Query the knowledge base
-```bash
-# Single query
-python rag_pipeline.py --query "What did the Fed say about inflation expectations?"
-
-# Interactive mode
-python rag_pipeline.py
-```
-
-### 6. View audit log
-```bash
-python rag_pipeline.py --audit
-```
-
----
-
-## Sample Documents (auto-created with --demo)
-
-| File | Type | Content |
-|------|------|---------|
-| `goldman_broker_note_NVDA.txt` | broker_note | Goldman NVDA Buy rating, $1,200 PT |
-| `fomc_minutes_nov2024.txt` | cb_minutes | Fed Nov 2024 rate cut decision |
-| `expert_call_transcript_semis.txt` | transcript | Semiconductor supply chain expert call |
-
----
-
-## Key Design Decisions (maps to case study)
-
-### Why TF-IDF here, not dense embeddings?
-TF-IDF runs with zero external dependencies — ideal for demo. In production at
-Apex, replace with `text-embedding-3-large` or a FinBERT-derived model deployed
-inside Apex's private VPC. Financial terminology (ticker symbols, rate terminology)
-benefits from domain-adapted embeddings.
-
-### Hallucination control
-The prompt explicitly instructs Claude to:
-- Only reference provided source documents
-- Use `[SOURCE N]` citations on every claim
-- Say "I don't know" rather than extrapolate
-- Flag uncertainty explicitly
-
-### Audit log (CRO requirement)
-Every query logs:
-- Timestamp (UTC)
-- Full query text
-- Retrieved chunks with source file, page, doc type, and relevance score
-- Model used
-- Full response text
-
-This satisfies SR 11-7 model risk governance requirements.
-
-### Document type detection
-Automatically classifies ingested documents as:
-`broker_note` | `cb_minutes` | `transcript` | `filing` | `unknown`
-
-Used for metadata filtering and retrieval context.
-
----
-
-## Production Upgrade Path
-
-| Component | Demo | Production |
-|-----------|------|------------|
-| Embeddings | TF-IDF (sklearn) | FinBERT / text-embedding-3-large |
-| Vector DB | In-memory dict | Pinecone / Weaviate (private VPC) |
-| LLM | Claude via public API | Azure OpenAI / AWS Bedrock private endpoint |
-| Chunking | Word-based | Semantic (spaCy sentence boundaries) |
-| Auth | None | SSO + role-based access |
-| Audit log | Local JSONL | Immutable cloud log (S3 + CloudTrail) |
-
----
-
-## File Structure
-```
-apex_rag/
-├── rag_pipeline.py      # Main pipeline
-├── vector_store.json    # Persisted chunk index (auto-generated)
-├── audit_log.jsonl      # Immutable query log (auto-generated)
-├── sample_docs/         # Demo documents (auto-generated with --demo)
-│   ├── goldman_broker_note_NVDA.txt
-│   ├── fomc_minutes_nov2024.txt
-│   └── expert_call_transcript_semis.txt
-└── README.md
-```
+- Reconciliation engine comparing internal positions against a mock custodian feed, classifying breaks by type
+- AI triage agent that proposes root causes and resolutions for flagged breaks, with a full audit trail and a human approval gate before any break is marked resolved
+- Lightweight dashboard showing daily NAV, open breaks, and the audit log
