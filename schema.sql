@@ -15,7 +15,7 @@ CREATE TABLE portfolios (
 CREATE TABLE securities (
     security_id      INTEGER PRIMARY KEY AUTOINCREMENT,
     ticker           TEXT NOT NULL UNIQUE,
-    instrument_type  TEXT NOT NULL,
+    instrument_type  TEXT NOT NULL,         -- equity, bond, future, swap, etc.
     currency         TEXT NOT NULL DEFAULT 'USD',
     maturity_date    DATE,
     coupon_rate      REAL
@@ -27,7 +27,7 @@ CREATE TABLE transactions (
     security_id       INTEGER NOT NULL REFERENCES securities(security_id),
     trade_date        DATE NOT NULL,
     settle_date       DATE NOT NULL,
-    transaction_type  TEXT NOT NULL,
+    transaction_type  TEXT NOT NULL,         -- buy, sell, receive, deliver
     quantity          REAL NOT NULL,
     price             REAL NOT NULL,
     commission        REAL NOT NULL DEFAULT 0.0
@@ -56,7 +56,7 @@ CREATE TABLE gl_accounts (
     gl_account_id    INTEGER PRIMARY KEY AUTOINCREMENT,
     account_number   TEXT NOT NULL UNIQUE,
     account_name     TEXT NOT NULL,
-    account_type     TEXT NOT NULL
+    account_type     TEXT NOT NULL           -- asset, liability, income, expense
 );
 
 CREATE TABLE gl_entries (
