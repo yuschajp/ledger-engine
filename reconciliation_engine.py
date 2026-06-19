@@ -25,11 +25,11 @@ def insert_custodian_position(conn, portfolio_id, security_id, as_of_date,
 
 
 def _record_break(conn, portfolio_id, security_id, as_of_date, break_type,
-                   internal_qty, custodian_qty):
+                   internal_qty, custodian_qty) -> int:
     diff = None
     if internal_qty is not None and custodian_qty is not None:
         diff = internal_qty - custodian_qty
-    conn.execute(
+    cur = conn.execute(
         """INSERT INTO reconciliation_breaks
            (portfolio_id, security_id, as_of_date, break_type,
             internal_quantity, custodian_quantity, quantity_diff, status, detected_at)
@@ -37,6 +37,7 @@ def _record_break(conn, portfolio_id, security_id, as_of_date, break_type,
         (portfolio_id, security_id, as_of_date, break_type,
          internal_qty, custodian_qty, diff, datetime.now(timezone.utc).isoformat()),
     )
+    return cur.lastrowid
 
 
 def run_reconciliation(conn, portfolio_id: int, as_of_date: str) -> list:
@@ -75,9 +76,10 @@ def run_reconciliation(conn, portfolio_id: int, as_of_date: str) -> list:
         else:
             continue  # matched -- no break
 
-        _record_break(conn, portfolio_id, security_id, as_of_date, break_type,
-                       internal_qty, custodian_qty)
+        break_id = _record_break(conn, portfolio_id, security_id, as_of_date, break_type,
+                                  internal_qty, custodian_qty)
         breaks.append({
+            "break_id": break_id,
             "security_id": security_id,
             "break_type": break_type,
             "internal_quantity": internal_qty,

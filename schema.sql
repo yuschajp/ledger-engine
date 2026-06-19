@@ -96,3 +96,18 @@ CREATE TABLE reconciliation_breaks (
     status                 TEXT NOT NULL DEFAULT 'open',  -- open, resolved
     detected_at            TEXT NOT NULL
 );
+
+-- Every proposed resolution from the triage agent, whether heuristic or
+-- LLM-generated, is logged here with a status that only a human reviewer
+-- can move out of pending_review. Nothing here ever auto-resolves a break.
+CREATE TABLE triage_decisions (
+    decision_id        INTEGER PRIMARY KEY AUTOINCREMENT,
+    break_id            INTEGER NOT NULL REFERENCES reconciliation_breaks(break_id),
+    method               TEXT NOT NULL,     -- heuristic or llm
+    root_cause           TEXT NOT NULL,
+    suggested_action     TEXT NOT NULL,
+    status                TEXT NOT NULL DEFAULT 'pending_review',  -- pending_review, approved, rejected
+    reviewed_by           TEXT,
+    reviewed_at           TEXT,
+    created_at            TEXT NOT NULL
+);
