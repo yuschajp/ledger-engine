@@ -69,3 +69,30 @@ CREATE TABLE gl_entries (
     credit_amount    REAL NOT NULL DEFAULT 0.0,
     description      TEXT
 );
+
+-- Mock external source for reconciliation: represents what a custodian
+-- or prime broker statement would report for the same portfolio/date.
+CREATE TABLE custodian_positions (
+    custodian_position_id  INTEGER PRIMARY KEY AUTOINCREMENT,
+    portfolio_id            INTEGER NOT NULL REFERENCES portfolios(portfolio_id),
+    security_id             INTEGER NOT NULL REFERENCES securities(security_id),
+    as_of_date               DATE NOT NULL,
+    quantity                 REAL NOT NULL,
+    market_value             REAL,
+    source                   TEXT NOT NULL DEFAULT 'custodian'
+);
+
+-- Every difference the reconciliation engine finds between the internal
+-- ledger and the custodian feed gets logged here, classified by type.
+CREATE TABLE reconciliation_breaks (
+    break_id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    portfolio_id         INTEGER NOT NULL REFERENCES portfolios(portfolio_id),
+    security_id          INTEGER REFERENCES securities(security_id),
+    as_of_date            DATE NOT NULL,
+    break_type            TEXT NOT NULL,    -- missing_internal, missing_custodian, quantity_break
+    internal_quantity     REAL,
+    custodian_quantity    REAL,
+    quantity_diff         REAL,
+    status                 TEXT NOT NULL DEFAULT 'open',  -- open, resolved
+    detected_at            TEXT NOT NULL
+);
