@@ -13,7 +13,7 @@ flowchart TD
     A[Mock data feeds<br/>trades, prices, custodian<br/><i>built</i>] --> B[Core ledger engine<br/>positions, GL postings, NAV<br/><i>built</i>]
     B --> C[Reconciliation engine<br/>break detection & classification<br/><i>built</i>]
     C --> D[AI triage agent<br/>root cause, audit trail, approval<br/><i>built</i>]
-    D --> E[Reports & dashboard<br/>NAV, reconciliation summary<br/><i>planned</i>]
+    D --> E[Reports & dashboard<br/>NAV, reconciliation summary<br/><i>built</i>]
 ```
 
 ## Schema
@@ -136,9 +136,11 @@ The reconciliation engine compares internal positions against a mock custodian f
 
 The triage agent proposes a root cause and suggested action for each open break, but it never resolves anything on its own. Every proposal is logged to `triage_decisions` as `pending_review`, and a break only flips to `resolved` after a human explicitly calls `approve_decision()`; calling `reject_decision()` instead leaves the break open with the rejection on record. That gate, not the proposal text, is the actual point of this layer: an audit trail where every decision is traceable to a specific human reviewer and timestamp, which is what governance actually means in a regulated ops environment. The agent runs on rule-based heuristics by default with zero external calls, and automatically switches to calling Claude for richer proposals if `ANTHROPIC_API_KEY` is set in the environment, falling back to the heuristic if that call fails for any reason.
 
+The dashboard is a static HTML report rather than a live server: `dashboard.py` runs the full pipeline end to end and writes a single `dashboard.html` file showing NAV, positions, reconciliation breaks with their status, and the complete triage audit log, all openable directly in a browser with no server to start or stop.
+
 ## Getting started
 
-Requires Python 3 only — no external dependencies, even for the AI layer (it calls the Claude API directly over HTTPS rather than requiring the `anthropic` package).
+Requires Python 3 only — no external dependencies, even for the AI layer (it calls the Claude API directly over HTTPS rather than requiring the `anthropic` package) and the dashboard (plain HTML/CSS, no Flask or Streamlit).
 
 ```bash
 git clone <your-repo-url>
@@ -146,9 +148,12 @@ cd ledger-engine
 python3 demo.py
 python3 recon_demo.py
 python3 triage_demo.py
+python3 dashboard.py
 ```
 
-`triage_demo.py` is interactive: it'll ask you to approve or reject each proposed resolution. To use Claude instead of the built-in heuristics for the proposals, set your API key first:
+`triage_demo.py` is interactive: it'll ask you to approve or reject each proposed resolution. `dashboard.py` runs non-interactively and auto-approves each break so the report shows a complete pipeline; open the resulting `dashboard.html` file in any browser to view it.
+
+To use Claude instead of the built-in heuristics for triage proposals, set your API key first:
 
 ```bash
 export ANTHROPIC_API_KEY=your_key_here
@@ -182,12 +187,13 @@ schema.sql                # table definitions
 ledger_engine.py           # core engine: transaction insertion, position recomputation, GL posting
 reconciliation_engine.py    # break detection and classification against a mock custodian feed
 triage_agent.py              # root cause proposals, audit logging, and the human approval gate
-demo.py                       # end-to-end ledger engine example
-recon_demo.py                  # end-to-end reconciliation example
-triage_demo.py                  # end-to-end triage example with interactive approval
+dashboard.py                  # generates a static HTML report from a full pipeline run
+demo.py                         # end-to-end ledger engine example
+recon_demo.py                    # end-to-end reconciliation example
+triage_demo.py                     # end-to-end triage example with interactive approval
 README.md
 ```
 
-## Roadmap
+## Status
 
-- Lightweight dashboard showing daily NAV, open breaks, and the audit log
+All four phases of the original architecture are now built: data feeds, ledger engine, reconciliation engine, triage agent, and dashboard. Possible next steps from here would be swapping the mock data feeds for real file formats (FIX-style trade messages, actual custodian statement layouts) or persisting state across runs instead of resetting on each script invocation.
