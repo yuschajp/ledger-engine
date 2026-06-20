@@ -126,6 +126,9 @@ def build_html(conn, portfolio_id, as_of, ticker_lookup):
   body {{ font-family: -apple-system, Helvetica, Arial, sans-serif; background: #f5f6f8; color: #1a1a1a; margin: 0; padding: 32px; }}
   h1 {{ color: #1B3A5C; margin-bottom: 4px; }}
   .subtitle {{ color: #5a5a5a; margin-bottom: 28px; }}
+  .source-link {{ display: inline-block; margin-bottom: 20px; font-size: 13px; }}
+  .source-link a {{ color: #1B3A5C; text-decoration: none; font-weight: 600; }}
+  .source-link a:hover {{ text-decoration: underline; }}
   .card {{ background: #ffffff; border-radius: 8px; padding: 20px 24px; margin-bottom: 24px; box-shadow: 0 1px 3px rgba(0,0,0,0.08); }}
   .card h2 {{ color: #1B3A5C; font-size: 16px; margin-top: 0; border-bottom: 1px solid #e2e2e2; padding-bottom: 8px; }}
   .nav-figure {{ font-size: 28px; font-weight: 600; color: #1B3A5C; }}
@@ -138,6 +141,7 @@ def build_html(conn, portfolio_id, as_of, ticker_lookup):
 <body>
   <h1>{html.escape(portfolio['name'])}</h1>
   <div class="subtitle">{html.escape(portfolio['base_currency'])} &middot; {html.escape(portfolio['strategy'] or '')} &middot; as of {as_of}</div>
+  <div class="source-link"><a href="https://github.com/yuschajp/ledger-engine">View source on GitHub &rarr;</a></div>
 
   <div class="card">
     <h2>Net asset value (cost basis)</h2>
