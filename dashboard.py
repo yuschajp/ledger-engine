@@ -18,6 +18,7 @@ import html
 from ledger_engine import init_db, insert_transaction, recompute_position, post_trade_entries
 from reconciliation_engine import insert_custodian_position, run_reconciliation
 from triage_agent import propose_resolution, log_triage_decision, approve_decision
+from triage_governance import CATEGORY_LABELS, compute_metrics, evaluate_agent, generate_scenarios
 
 
 def setup_security(conn, ticker, instrument_type="equity"):
@@ -76,7 +77,7 @@ def render_table(headers, rows):
     return f"<table><thead><tr>{head}</tr></thead><tbody>{body}</tbody></table>"
 
 
-def build_html(conn, portfolio_id, as_of, ticker_lookup):
+def build_html(conn, portfolio_id, as_of, ticker_lookup, governance_results, governance_metrics):
     portfolio = conn.execute(
         "SELECT name, base_currency, strategy FROM portfolios WHERE portfolio_id = ?", (portfolio_id,)
     ).fetchone()
@@ -117,6 +118,15 @@ def build_html(conn, portfolio_id, as_of, ticker_lookup):
         for d in decisions
     ]
 
+    overridden_rows = [
+        (r["scenario_id"], r["break_type"], CATEGORY_LABELS[r["predicted_cause"]],
+         CATEGORY_LABELS[r["true_cause"]], f"{r['resolution_minutes']} min")
+        for r in governance_results if not r["matched"]
+    ][:6]
+    accuracy_rows = [
+        (bt, f"{acc:.0%}") for bt, acc in sorted(governance_metrics["accuracy_by_break_type"].items())
+    ]
+
     return f"""<!DOCTYPE html>
 <html>
 <head>
@@ -132,6 +142,13 @@ def build_html(conn, portfolio_id, as_of, ticker_lookup):
   .card {{ background: #ffffff; border-radius: 8px; padding: 20px 24px; margin-bottom: 24px; box-shadow: 0 1px 3px rgba(0,0,0,0.08); }}
   .card h2 {{ color: #1B3A5C; font-size: 16px; margin-top: 0; border-bottom: 1px solid #e2e2e2; padding-bottom: 8px; }}
   .nav-figure {{ font-size: 28px; font-weight: 600; color: #1B3A5C; }}
+  .figure-row {{ }}
+  .figure-block {{ display: inline-block; margin-right: 48px; vertical-align: top; }}
+  .figure {{ font-size: 24px; font-weight: 600; color: #1B3A5C; }}
+  .figure-warn {{ color: #b3401f; }}
+  .figure-label {{ font-size: 12px; color: #5a5a5a; margin-bottom: 4px; }}
+  .note {{ font-size: 13px; color: #5a5a5a; margin-bottom: 14px; }}
+  .takeaway {{ font-size: 13px; line-height: 1.6; color: #2a2a2a; }}
   table {{ width: 100%; border-collapse: collapse; font-size: 13px; }}
   th {{ text-align: left; background: #1B3A5C; color: #fff; padding: 8px 10px; }}
   td {{ padding: 8px 10px; border-bottom: 1px solid #ececec; }}
@@ -162,6 +179,38 @@ def build_html(conn, portfolio_id, as_of, ticker_lookup):
     <h2>Triage audit log</h2>
     {render_table(["Decision ID", "Break ID", "Method", "Root cause", "Suggested action", "Status", "Reviewed by"], decision_rows)}
   </div>
+
+  <div class="card">
+    <h2>Triage agent governance report</h2>
+    <div class="note">Evaluated against a 40-scenario synthetic batch with known ground truth, seeded for reproducibility -- this demonstrates the evaluation methodology, not measured production performance.</div>
+    <div class="figure-row">
+      <div class="figure-block">
+        <div class="figure-label">Scenarios evaluated</div>
+        <div class="figure">{governance_metrics['total']}</div>
+      </div>
+      <div class="figure-block">
+        <div class="figure-label">Overall accuracy</div>
+        <div class="figure">{governance_metrics['accuracy']:.0%}</div>
+      </div>
+      <div class="figure-block">
+        <div class="figure-label">Override rate</div>
+        <div class="figure figure-warn">{governance_metrics['override_rate']:.0%}</div>
+      </div>
+      <div class="figure-block">
+        <div class="figure-label">Avg. time: approved vs. overridden</div>
+        <div class="figure">{governance_metrics['avg_minutes_matched']:.0f} / {governance_metrics['avg_minutes_overridden']:.0f} min</div>
+      </div>
+    </div>
+
+    <div style="margin-top: 20px;"><strong style="font-size: 13px; color: #1B3A5C;">Accuracy by break type</strong></div>
+    {render_table(["Break type", "Accuracy"], accuracy_rows)}
+
+    <div style="margin-top: 20px;"><strong style="font-size: 13px; color: #1B3A5C;">Sample of overridden decisions</strong></div>
+    {render_table(["Scenario", "Break type", "Agent proposed", "Actual cause", "Time to resolve"], overridden_rows)}
+
+    <div style="margin-top: 20px;"><strong style="font-size: 13px; color: #1B3A5C;">Product takeaway</strong></div>
+    <div class="takeaway">The heuristic agent is reliable on clearly categorical breaks and on quantity breaks with an unambiguous percentage difference. Its blind spot is small positions, where a single fixed 1% threshold doesn't separate a genuine error from benign rounding either way. That's exactly the kind of failure mode a human-in-the-loop gate exists to catch, and exactly the kind of finding that should drive the next model iteration &mdash; scaling the threshold to position size rather than using one fixed cutoff &mdash; rather than removing the gate.</div>
+  </div>
 </body>
 </html>"""
 
@@ -169,7 +218,12 @@ def build_html(conn, portfolio_id, as_of, ticker_lookup):
 def main():
     conn = init_db(":memory:")
     portfolio_id, as_of, ticker_lookup = build_pipeline_run(conn)
-    output = build_html(conn, portfolio_id, as_of, ticker_lookup)
+
+    scenarios = generate_scenarios(n_easy=30, n_hard=10, seed=42)
+    governance_results = evaluate_agent(scenarios, seed=7)
+    governance_metrics = compute_metrics(governance_results)
+
+    output = build_html(conn, portfolio_id, as_of, ticker_lookup, governance_results, governance_metrics)
     with open("dashboard.html", "w") as f:
         f.write(output)
     print("Wrote dashboard.html -- open it in your browser to view it.")

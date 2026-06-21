@@ -13,6 +13,13 @@
   .card { background: #ffffff; border-radius: 8px; padding: 20px 24px; margin-bottom: 24px; box-shadow: 0 1px 3px rgba(0,0,0,0.08); }
   .card h2 { color: #1B3A5C; font-size: 16px; margin-top: 0; border-bottom: 1px solid #e2e2e2; padding-bottom: 8px; }
   .nav-figure { font-size: 28px; font-weight: 600; color: #1B3A5C; }
+  .figure-row { }
+  .figure-block { display: inline-block; margin-right: 48px; vertical-align: top; }
+  .figure { font-size: 24px; font-weight: 600; color: #1B3A5C; }
+  .figure-warn { color: #b3401f; }
+  .figure-label { font-size: 12px; color: #5a5a5a; margin-bottom: 4px; }
+  .note { font-size: 13px; color: #5a5a5a; margin-bottom: 14px; }
+  .takeaway { font-size: 13px; line-height: 1.6; color: #2a2a2a; }
   table { width: 100%; border-collapse: collapse; font-size: 13px; }
   th { text-align: left; background: #1B3A5C; color: #fff; padding: 8px 10px; }
   td { padding: 8px 10px; border-bottom: 1px solid #ececec; }
@@ -42,6 +49,38 @@
   <div class="card">
     <h2>Triage audit log</h2>
     <table><thead><tr><th>Decision ID</th><th>Break ID</th><th>Method</th><th>Root cause</th><th>Suggested action</th><th>Status</th><th>Reviewed by</th></tr></thead><tbody><tr><td>1</td><td>1</td><td>heuristic</td><td>Material quantity difference, consistent with a missed or duplicated trade, or an unprocessed corporate action.</td><td>Pull the trade blotter for this security and date and compare line by line against the custodian statement.</td><td>approved</td><td>dashboard-demo</td></tr><tr><td>2</td><td>2</td><td>heuristic</td><td>Position is booked internally but not yet reflected on the custodian statement, most commonly a settlement timing lag.</td><td>Hold for one more settlement cycle, then escalate to the custodian if it&#x27;s still missing.</td><td>approved</td><td>dashboard-demo</td></tr><tr><td>3</td><td>3</td><td>heuristic</td><td>Custodian reports a position with no matching internal trade, often a corporate action, transfer, or unbooked trade.</td><td>Check for corporate action notices and unbooked trades on this security before assuming a custodian error.</td><td>approved</td><td>dashboard-demo</td></tr></tbody></table>
+  </div>
+
+  <div class="card">
+    <h2>Triage agent governance report</h2>
+    <div class="note">Evaluated against a 40-scenario synthetic batch with known ground truth, seeded for reproducibility -- this demonstrates the evaluation methodology, not measured production performance.</div>
+    <div class="figure-row">
+      <div class="figure-block">
+        <div class="figure-label">Scenarios evaluated</div>
+        <div class="figure">40</div>
+      </div>
+      <div class="figure-block">
+        <div class="figure-label">Overall accuracy</div>
+        <div class="figure">85%</div>
+      </div>
+      <div class="figure-block">
+        <div class="figure-label">Override rate</div>
+        <div class="figure figure-warn">15%</div>
+      </div>
+      <div class="figure-block">
+        <div class="figure-label">Avg. time: approved vs. overridden</div>
+        <div class="figure">7 / 54 min</div>
+      </div>
+    </div>
+
+    <div style="margin-top: 20px;"><strong style="font-size: 13px; color: #1B3A5C;">Accuracy by break type</strong></div>
+    <table><thead><tr><th>Break type</th><th>Accuracy</th></tr></thead><tbody><tr><td>missing_custodian</td><td>100%</td></tr><tr><td>missing_internal</td><td>100%</td></tr><tr><td>quantity_break</td><td>75%</td></tr></tbody></table>
+
+    <div style="margin-top: 20px;"><strong style="font-size: 13px; color: #1B3A5C;">Sample of overridden decisions</strong></div>
+    <table><thead><tr><th>Scenario</th><th>Break type</th><th>Agent proposed</th><th>Actual cause</th><th>Time to resolve</th></tr></thead><tbody><tr><td>9</td><td>quantity_break</td><td>Genuine trade error</td><td>Rounding / lot-size convention</td><td>67 min</td></tr><tr><td>16</td><td>quantity_break</td><td>Genuine trade error</td><td>Rounding / lot-size convention</td><td>56 min</td></tr><tr><td>23</td><td>quantity_break</td><td>Genuine trade error</td><td>Rounding / lot-size convention</td><td>66 min</td></tr><tr><td>30</td><td>quantity_break</td><td>Genuine trade error</td><td>Rounding / lot-size convention</td><td>32 min</td></tr><tr><td>31</td><td>quantity_break</td><td>Genuine trade error</td><td>Rounding / lot-size convention</td><td>65 min</td></tr><tr><td>35</td><td>quantity_break</td><td>Rounding / lot-size convention</td><td>Genuine trade error</td><td>39 min</td></tr></tbody></table>
+
+    <div style="margin-top: 20px;"><strong style="font-size: 13px; color: #1B3A5C;">Product takeaway</strong></div>
+    <div class="takeaway">The heuristic agent is reliable on clearly categorical breaks and on quantity breaks with an unambiguous percentage difference. Its blind spot is small positions, where a single fixed 1% threshold doesn't separate a genuine error from benign rounding either way. That's exactly the kind of failure mode a human-in-the-loop gate exists to catch, and exactly the kind of finding that should drive the next model iteration &mdash; scaling the threshold to position size rather than using one fixed cutoff &mdash; rather than removing the gate.</div>
   </div>
 </body>
 </html>
