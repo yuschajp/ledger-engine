@@ -8,16 +8,13 @@ This project demonstrates the data architecture and systems-integration thinking
 
 ## Architecture
 
-```mermaid
-flowchart TD
-    A[Mock data feeds<br/>trades, prices, custodian<br/><i>built</i>] --> B[Core ledger engine<br/>positions, GL postings, NAV<br/><i>built</i>]
-    B --> C[Reconciliation engine<br/>break detection & classification<br/><i>built</i>]
-    C --> D[AI triage agent<br/>root cause, audit trail, approval<br/><i>built</i>]
-    D --> E[Governance & evaluation layer<br/>accuracy, override rate, blind spots<br/><i>built</i>]
-    B --> F[PnL anomaly detection<br/>z-score vs. Isolation Forest<br/><i>built</i>]
-    E --> G[Reports & dashboard<br/>NAV, reconciliation, governance, anomalies<br/><i>built</i>]
-    F --> G
-```
+1. Mock data feeds (trades, prices, custodian) — *built*
+2. Core ledger engine (positions, GL postings, NAV) — *built*
+3. Reconciliation engine (break detection & classification) — *built*, runs off the core ledger engine
+4. AI triage agent (root cause, audit trail, approval) — *built*, runs off the reconciliation engine
+5. Governance & evaluation layer (accuracy, override rate, blind spots) — *built*, evaluates the triage agent
+6. PnL anomaly detection (z-score vs. Isolation Forest) — *built*, runs independently off the core ledger engine, a different risk surface from reconciliation
+7. Reports & dashboard (NAV, reconciliation, governance, anomalies) — *built*, combines everything above into one HTML report
 
 ## Schema
 
