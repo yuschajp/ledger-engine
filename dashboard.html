@@ -82,5 +82,18 @@
     <div style="margin-top: 20px;"><strong style="font-size: 13px; color: #1B3A5C;">Product takeaway</strong></div>
     <div class="takeaway">The heuristic agent is reliable on clearly categorical breaks and on quantity breaks with an unambiguous percentage difference. Its blind spot is small positions, where a single fixed 1% threshold doesn't separate a genuine error from benign rounding either way. That's exactly the kind of failure mode a human-in-the-loop gate exists to catch, and exactly the kind of finding that should drive the next model iteration &mdash; scaling the threshold to position size rather than using one fixed cutoff &mdash; rather than removing the gate.</div>
   </div>
+
+  <div class="card">
+    <h2>PnL anomaly detection: model comparison</h2>
+    <div class="note">A different risk surface from reconciliation: this flags PnL prints that don't look like the rest of the series, regardless of whether quantities ever disagreed with anyone. Evaluated against a 250-day synthetic series with known ground truth, seeded for reproducibility.</div>
+
+    <table><thead><tr><th>Detector</th><th>Precision</th><th>Recall</th><th>F1</th></tr></thead><tbody><tr><td>Rolling z-score (interpretable)</td><td>43%</td><td>75%</td><td>0.55</td></tr><tr><td>Isolation Forest (ML)</td><td>33%</td><td>75%</td><td>0.46</td></tr></tbody></table>
+
+    <div style="margin-top: 20px;"><strong style="font-size: 13px; color: #1B3A5C;">Days flagged by either detector</strong></div>
+    <table><thead><tr><th>Date</th><th>PnL</th><th>Day type</th><th>Z-score flagged</th><th>Isolation Forest flagged</th></tr></thead><tbody><tr><td>2024-03-08</td><td>$93,102</td><td>legit_high_vol</td><td>Yes</td><td>Yes</td></tr><tr><td>2024-04-10</td><td>$-105,189</td><td>data_error</td><td>Yes</td><td>Yes</td></tr><tr><td>2024-04-25</td><td>$58,807</td><td>legit_high_vol</td><td>Yes</td><td>Yes</td></tr><tr><td>2024-06-27</td><td>$138,871</td><td>data_error</td><td>Yes</td><td>Yes</td></tr><tr><td>2024-07-29</td><td>$-219,581</td><td>data_error</td><td>Yes</td><td>Yes</td></tr><tr><td>2024-08-06</td><td>$32,159</td><td>normal</td><td>No</td><td>Yes</td></tr><tr><td>2024-08-08</td><td>$29,472</td><td>normal</td><td>No</td><td>Yes</td></tr><tr><td>2024-08-09</td><td>$33,942</td><td>normal</td><td>No</td><td>Yes</td></tr><tr><td>2024-08-21</td><td>$-20,537</td><td>normal</td><td>No</td><td>Yes</td></tr><tr><td>2024-09-03</td><td>$-25,895</td><td>legit_high_vol</td><td>Yes</td><td>No</td></tr><tr><td>2024-11-08</td><td>$-32,758</td><td>normal</td><td>Yes</td><td>No</td></tr></tbody></table>
+
+    <div style="margin-top: 20px;"><strong style="font-size: 13px; color: #1B3A5C;">Product takeaway</strong></div>
+    <div class="takeaway">Both detectors catch the same share of genuine data errors. The Isolation Forest doesn't catch more of them, but it flags more false positives &mdash; a run of ordinary days that happened to sit inside an elevated-volatility stretch, because its second feature is the recent rolling volatility itself, not just the day's PnL. That's a specific, real cost of the more sophisticated model, not a reason to discard it, but a reason to feed it better features or pair it with the simpler detector as a sanity check &mdash; and to never let either one resolve anything without a person looking at the flagged day first.</div>
+  </div>
 </body>
 </html>

@@ -19,6 +19,7 @@ from ledger_engine import init_db, insert_transaction, recompute_position, post_
 from reconciliation_engine import insert_custodian_position, run_reconciliation
 from triage_agent import propose_resolution, log_triage_decision, approve_decision
 from triage_governance import CATEGORY_LABELS, compute_metrics, evaluate_agent, generate_scenarios
+from pnl_anomaly_model import run_comparison
 
 
 def setup_security(conn, ticker, instrument_type="equity"):
@@ -77,7 +78,8 @@ def render_table(headers, rows):
     return f"<table><thead><tr>{head}</tr></thead><tbody>{body}</tbody></table>"
 
 
-def build_html(conn, portfolio_id, as_of, ticker_lookup, governance_results, governance_metrics):
+def build_html(conn, portfolio_id, as_of, ticker_lookup, governance_results, governance_metrics,
+                anomaly_result):
     portfolio = conn.execute(
         "SELECT name, base_currency, strategy FROM portfolios WHERE portfolio_id = ?", (portfolio_id,)
     ).fetchone()
@@ -126,6 +128,23 @@ def build_html(conn, portfolio_id, as_of, ticker_lookup, governance_results, gov
     accuracy_rows = [
         (bt, f"{acc:.0%}") for bt, acc in sorted(governance_metrics["accuracy_by_break_type"].items())
     ]
+
+    anomaly_df = anomaly_result["df"]
+    z_metrics = anomaly_result["zscore_metrics"]
+    if_metrics = anomaly_result["iforest_metrics"]
+    detector_comparison_rows = [
+        ("Rolling z-score (interpretable)", f"{z_metrics['precision']:.0%}", f"{z_metrics['recall']:.0%}", f"{z_metrics['f1']:.2f}"),
+        ("Isolation Forest (ML)", f"{if_metrics['precision']:.0%}", f"{if_metrics['recall']:.0%}", f"{if_metrics['f1']:.2f}"),
+    ]
+    flagged_days_rows = []
+    for _, row in anomaly_df[anomaly_df["zscore_flag"] | anomaly_df["iforest_flag"]].iterrows():
+        flagged_days_rows.append((
+            row["date"].strftime("%Y-%m-%d"),
+            f"${row['pnl']:,.0f}",
+            row["day_type"],
+            "Yes" if row["zscore_flag"] else "No",
+            "Yes" if row["iforest_flag"] else "No",
+        ))
 
     return f"""<!DOCTYPE html>
 <html>
@@ -211,6 +230,19 @@ def build_html(conn, portfolio_id, as_of, ticker_lookup, governance_results, gov
     <div style="margin-top: 20px;"><strong style="font-size: 13px; color: #1B3A5C;">Product takeaway</strong></div>
     <div class="takeaway">The heuristic agent is reliable on clearly categorical breaks and on quantity breaks with an unambiguous percentage difference. Its blind spot is small positions, where a single fixed 1% threshold doesn't separate a genuine error from benign rounding either way. That's exactly the kind of failure mode a human-in-the-loop gate exists to catch, and exactly the kind of finding that should drive the next model iteration &mdash; scaling the threshold to position size rather than using one fixed cutoff &mdash; rather than removing the gate.</div>
   </div>
+
+  <div class="card">
+    <h2>PnL anomaly detection: model comparison</h2>
+    <div class="note">A different risk surface from reconciliation: this flags PnL prints that don't look like the rest of the series, regardless of whether quantities ever disagreed with anyone. Evaluated against a 250-day synthetic series with known ground truth, seeded for reproducibility.</div>
+
+    {render_table(["Detector", "Precision", "Recall", "F1"], detector_comparison_rows)}
+
+    <div style="margin-top: 20px;"><strong style="font-size: 13px; color: #1B3A5C;">Days flagged by either detector</strong></div>
+    {render_table(["Date", "PnL", "Day type", "Z-score flagged", "Isolation Forest flagged"], flagged_days_rows)}
+
+    <div style="margin-top: 20px;"><strong style="font-size: 13px; color: #1B3A5C;">Product takeaway</strong></div>
+    <div class="takeaway">Both detectors catch the same share of genuine data errors. The Isolation Forest doesn't catch more of them, but it flags more false positives &mdash; a run of ordinary days that happened to sit inside an elevated-volatility stretch, because its second feature is the recent rolling volatility itself, not just the day's PnL. That's a specific, real cost of the more sophisticated model, not a reason to discard it, but a reason to feed it better features or pair it with the simpler detector as a sanity check &mdash; and to never let either one resolve anything without a person looking at the flagged day first.</div>
+  </div>
 </body>
 </html>"""
 
@@ -223,7 +255,10 @@ def main():
     governance_results = evaluate_agent(scenarios, seed=7)
     governance_metrics = compute_metrics(governance_results)
 
-    output = build_html(conn, portfolio_id, as_of, ticker_lookup, governance_results, governance_metrics)
+    anomaly_result = run_comparison(n_days=250, seed=11)
+
+    output = build_html(conn, portfolio_id, as_of, ticker_lookup, governance_results, governance_metrics,
+                         anomaly_result)
     with open("dashboard.html", "w") as f:
         f.write(output)
     print("Wrote dashboard.html -- open it in your browser to view it.")
